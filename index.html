@@ -232,6 +232,7 @@ input::placeholder{color:#a97aa5}
     <div class="opts">
       <label><input type="checkbox" id="optMusic" checked>เปิดเพลงเองตอนเริ่มโฟกัส</label>
       <label><input type="checkbox" id="optNext" checked>เริ่มรอบถัดไปต่อเลย</label>
+      <label><input type="checkbox" id="optShuffle" checked>สุ่มเพลงใน playlist (shuffle)</label>
     </div>
   </div>
 
@@ -253,10 +254,10 @@ const store = {
 
 /* ---------- state ---------- */
 const S = { phase:'work', running:false, total:0, remaining:0, endAt:0, cycles:0,
-  work:50, brk:10, preset:'50-10', autoMusic:true, autoNext:true };
+  work:50, brk:10, preset:'50-10', autoMusic:true, autoNext:true, shuffle:true };
 const saved = store.get('prefs', {});
-Object.assign(S, ['preset','work','brk','autoMusic','autoNext'].reduce((o,k)=>{ if(saved[k]!==undefined) o[k]=saved[k]; return o; }, {}));
-function savePrefs(){ store.set('prefs', { preset:S.preset, work:S.work, brk:S.brk, autoMusic:S.autoMusic, autoNext:S.autoNext }); }
+Object.assign(S, ['preset','work','brk','autoMusic','autoNext','shuffle'].reduce((o,k)=>{ if(saved[k]!==undefined) o[k]=saved[k]; return o; }, {}));
+function savePrefs(){ store.set('prefs', { preset:S.preset, work:S.work, brk:S.brk, autoMusic:S.autoMusic, autoNext:S.autoNext, shuffle:S.shuffle }); }
 function setDur(){ S.total = (S.phase === 'work' ? S.work : S.brk) * 60000; S.remaining = S.total; }
 
 /* ---------- elements ---------- */
@@ -365,13 +366,13 @@ function ytErr(c){
 
 function mkYouTube(src, host, cb){
   const mount = document.createElement('div'); host.appendChild(mount);
-  let player = null, ready = false, dead = false;
+  let player = null, ready = false, dead = false, fresh = true;
   loadYT().then(() => {
     if (dead) return;
     const vars = { playsinline:1, rel:0, modestbranding:1, iv_load_policy:3 };
     if (/^https?:$/.test(location.protocol)) vars.origin = location.origin;
     const opt = { width:'100%', height:'100%', playerVars:vars, events:{
-      onReady: e => { ready = true; if (src.listId){ try{ e.target.setLoop(true); }catch(_){} } cb.ready(); },
+      onReady: e => { ready = true; if (src.listId){ try{ e.target.setLoop(true); if (cb.shuffle()) e.target.setShuffle(true); }catch(_){} } cb.ready(); },
       onError: e => cb.error(ytErr(e.data)),
       onStateChange: e => { cb.state(e.data === 1 || e.data === 3); }
     }};
@@ -380,7 +381,19 @@ function mkYouTube(src, host, cb){
     player = new window.YT.Player(mount, opt);
   }).catch(() => cb.error('โหลดตัวเล่น YouTube ไม่ได้ เช็กอินเทอร์เน็ตแล้วลองใหม่นะ'));
   return {
-    play(){ if (ready) player.playVideo(); },
+    play(){
+      if (!ready) return;
+      if (fresh && src.listId && cb.shuffle()){
+        fresh = false;
+        try{
+          const pl = player.getPlaylist();
+          if (pl && pl.length > 1){ player.setShuffle(true); player.playVideoAt(Math.floor(Math.random() * pl.length)); return; }
+        }catch(_){}
+      }
+      fresh = false;
+      player.playVideo();
+    },
+    setShuffle(on){ if (ready && src.listId){ try{ player.setShuffle(!!on); }catch(_){} } },
     pause(){ if (ready) player.pauseVideo(); },
     destroy(){ dead = true; try{ if (player) player.destroy(); }catch(_){} }
   };
@@ -409,16 +422,29 @@ function mkSoundCloud(src, host, cb){
   f.src = 'https://w.soundcloud.com/player/?url=' + encodeURIComponent(src.url) +
     '&color=%23ff6fae&auto_play=false&hide_related=true&show_comments=false&show_teaser=false&visual=true';
   host.appendChild(f);
-  let w = null, ready = false, dead = false;
+  let w = null, ready = false, dead = false, fresh = true;
+  function pickRandom(){
+    w.getSounds(s => { if (s && s.length > 1) w.skip(Math.floor(Math.random() * s.length)); });
+  }
   loadSC().then(SC => {
     if (dead) return;
     w = SC.Widget(f);
     w.bind(SC.Widget.Events.READY, () => { ready = true; cb.ready(); });
     w.bind(SC.Widget.Events.PLAY, () => cb.state(true));
     w.bind(SC.Widget.Events.PAUSE, () => cb.state(false));
+    w.bind(SC.Widget.Events.FINISH, () => { if (cb.shuffle()) pickRandom(); });
   }).catch(() => cb.error('โหลดตัวเล่น SoundCloud ไม่ได้ เช็กอินเทอร์เน็ตแล้วลองใหม่นะ'));
   return {
-    play(){ if (ready) w.play(); },
+    play(){
+      if (!ready) return;
+      if (fresh && cb.shuffle()){
+        fresh = false;
+        w.getSounds(s => { if (s && s.length > 1) w.skip(Math.floor(Math.random() * s.length)); w.play(); });
+        return;
+      }
+      fresh = false;
+      w.play();
+    },
     pause(){ if (ready) w.pause(); },
     destroy(){ dead = true; }
   };
@@ -462,6 +488,7 @@ function insert(raw, quiet){
   const guard = f => (...a) => { if (my === token) f(...a); };
   const cb = {
     ready: guard(() => { setMsg(''); if (music.want && music.ad) music.ad.play(); }),
+    shuffle: () => S.shuffle,
     state: guard(p => { music.playing = p; renderOsd(); }),
     error: guard(m => { setMsg(m); setStatus(m, true); })
   };
@@ -474,7 +501,8 @@ function insert(raw, quiet){
   el.eject.disabled = false;
   el.link.value = raw.trim();
   store.set('link', raw.trim());
-  setStatus(quiet ? 'ใส่เทปเดิมให้แล้ว' : 'ใส่เทปแล้ว กด START เพลงจะเริ่มพร้อมรอบโฟกัส');
+  setStatus((quiet ? 'ใส่เทปเดิมให้แล้ว' : 'ใส่เทปแล้ว กด START เพลงจะเริ่มพร้อมรอบโฟกัส') +
+    (src.type === 'spotify' ? ' (Spotify สลับเพลงจากหน้านี้ไม่ได้)' : ''));
   renderOsd();
 }
 function eject(silent){
@@ -557,6 +585,11 @@ $('#optMusic').checked = S.autoMusic;
 $('#optNext').checked = S.autoNext;
 $('#optMusic').addEventListener('change', e => { S.autoMusic = e.target.checked; savePrefs(); });
 $('#optNext').addEventListener('change', e => { S.autoNext = e.target.checked; savePrefs(); });
+$('#optShuffle').checked = S.shuffle;
+$('#optShuffle').addEventListener('change', e => {
+  S.shuffle = e.target.checked; savePrefs();
+  if (cur && cur.ad.setShuffle) cur.ad.setShuffle(S.shuffle);
+});
 
 $('#tapeForm').addEventListener('submit', e => { e.preventDefault(); insert(el.link.value); });
 el.eject.addEventListener('click', () => eject(false));
