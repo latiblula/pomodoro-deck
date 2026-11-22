@@ -33,13 +33,13 @@ body{
   font-family:var(--th);
   font-size:14px;line-height:1.5;
 }
-.deck{max-width:640px;margin:0 auto;padding:32px 20px 48px;display:grid;gap:24px}
+.deck{max-width:640px;margin:0 auto;padding:32px 20px 48px;display:grid;grid-template-columns:minmax(0,1fr);gap:24px}
 
 /* pixel outline helper: 4px notched border drawn with hard shadows */
 .px{box-shadow:0 -4px 0 0 var(--ink),0 4px 0 0 var(--ink),-4px 0 0 0 var(--ink),4px 0 0 0 var(--ink)}
 
 .device{
-  position:relative;margin:4px;padding:20px 20px 24px;display:grid;gap:18px;
+  position:relative;margin:4px;padding:20px 20px 24px;display:grid;grid-template-columns:minmax(0,1fr);gap:18px;
   background:var(--candy);
   box-shadow:0 -4px 0 0 var(--ink),0 4px 0 0 var(--ink),-4px 0 0 0 var(--ink),4px 0 0 0 var(--ink),
     inset 0 -8px 0 0 #e87fb0,inset 0 6px 0 0 #ffd0e6,0 16px 0 0 rgba(0,0,0,.3);
@@ -74,7 +74,8 @@ body{
 .lcd{display:grid;grid-template-columns:1fr auto;align-items:end;gap:6px 12px;background:var(--ink);padding:14px 16px 16px}
 .phase{font-family:var(--px);font-size:10px;color:var(--rose);letter-spacing:1px;margin-bottom:6px}
 body[data-phase="break"] .phase{color:var(--mint)}
-.time{font-family:var(--lcd);font-size:clamp(76px,19vw,108px);line-height:.8;color:var(--bubble);
+.lcd>div:first-child{min-width:0}
+.time{font-family:var(--lcd);font-size:clamp(64px,17vw,108px);line-height:.8;color:var(--bubble);
   text-shadow:0 0 12px rgba(255,111,174,.55);letter-spacing:2px;font-variant-numeric:tabular-nums}
 body[data-phase="break"] .time{color:#d2fff0;text-shadow:0 0 12px rgba(127,224,195,.55)}
 .cycles{display:grid;gap:8px;justify-items:end;padding-bottom:6px}
@@ -139,6 +140,38 @@ input::placeholder{color:#a97aa5}
 .foot p{margin:0}
 .filehint{color:var(--butter)}
 
+[hidden]{display:none!important}
+
+/* wrappers: invisible on phones, real columns on desktop */
+.stage{display:contents}
+.unit{display:grid;gap:18px}
+.side{display:grid;gap:18px}
+.screen{container-type:inline-size}
+.osd{font-size:clamp(9px,1.5cqw,17px)}
+.screenmsg{font-size:clamp(12px,1.6cqw,20px)}
+
+/* desktop: video + timer fill the left, controls sit beside them, no page scroll */
+@media (min-width:900px) and (min-height:600px){
+  :root{--sidew:clamp(320px,27vw,420px);--tf:clamp(56px,11vh,120px);--lcd-h:calc(78px + .8 * var(--tf))}
+  .deck{max-width:none;margin:0;height:100dvh;padding:14px 20px 12px;gap:22px;grid-template-rows:minmax(0,1fr) auto}
+  .device{min-height:0;padding:18px 20px 20px;grid-template-columns:minmax(0,1fr) var(--sidew);grid-template-rows:auto minmax(0,1fr);gap:14px 20px}
+  .topbar{grid-column:1/-1}
+  .stage{display:grid;grid-column:1;grid-row:2;min-height:0;container-type:size;place-items:center}
+  .unit{width:max(300px,min(100cqw,calc((100cqh - var(--lcd-h) - 18px - 28px) * 16 / 9 + 28px)))}
+  .time{font-size:var(--tf)}
+  .side{grid-column:2;grid-row:2;display:flex;flex-direction:column;min-height:0;overflow-y:auto;padding:6px;margin:-6px}
+  .side>*{flex:none}
+  .side>:first-child{margin-top:auto}
+  .side>:last-child{margin-bottom:auto}
+  .tape{grid-template-columns:1fr}
+  .foot{display:flex;flex-wrap:wrap;justify-content:center;gap:2px 24px;font-size:11px}
+}
+@media (min-width:900px) and (min-height:600px) and (max-height:780px){
+  .side{gap:12px}
+  .deckslot{display:none}
+  .tape{padding:12px 14px}
+}
+
 @media (max-width:520px){
   .device{padding:16px 14px 20px}
   .tape{grid-template-columns:1fr}
@@ -165,6 +198,7 @@ input::placeholder{color:#a97aa5}
       </div>
     </div>
 
+    <div class="stage"><div class="unit">
     <div class="bezel">
       <div class="screen" id="screen">
         <canvas id="scene" aria-label="ห้องนั่งทำงานแบบพิกเซล มีแมว หน้าต่างกลางคืน และโคมไฟ"></canvas>
@@ -189,7 +223,9 @@ input::placeholder{color:#a97aa5}
       </div>
       <div class="bar" id="bar" aria-hidden="true"></div>
     </section>
+    </div></div>
 
+    <div class="side">
     <div class="row">
       <button class="btn big" id="btnStart" type="button">START</button>
       <button class="btn small" id="btnReset" type="button">RESET</button>
@@ -233,6 +269,7 @@ input::placeholder{color:#a97aa5}
       <label><input type="checkbox" id="optMusic" checked>เปิดเพลงเองตอนเริ่มโฟกัส</label>
       <label><input type="checkbox" id="optNext" checked>เริ่มรอบถัดไปต่อเลย</label>
       <label><input type="checkbox" id="optShuffle" checked>สุ่มเพลงใน playlist (shuffle)</label>
+    </div>
     </div>
   </div>
 
